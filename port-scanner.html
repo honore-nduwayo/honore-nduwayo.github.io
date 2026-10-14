@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A fast port scanner that gave wrong answers | Honore Nduwayo</title>
+  <meta name="description" content="I built a TCP port scanner in Python. With a short timeout, the faster runs found fewer open ports than the slow one.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <nav aria-label="Main">
+      <a href="index.html">Home</a>
+      <a href="https://github.com/honore-nduwayo/port-scanner">Code on GitHub</a>
+    </nav>
+
+    <article>
+      <h1>A fast port scanner that gave wrong answers</h1>
+      <p class="lede">14 October 2026</p>
+
+      <p>This month I built a port scanner in Python to learn how sockets and threads work. It is small and does one job: it tries to connect to each port on a machine and reports which ones answer. The code is on <a href="https://github.com/honore-nduwayo/port-scanner">GitHub</a>.</p>
+
+      <p class="note">I only scanned my own computer and scanme.nmap.org, a server the Nmap project provides for light testing. Scanning machines you don't own, or don't have written permission to test, can be illegal.</p>
+
+      <h2>How it works</h2>
+      <p>The scanner makes a normal TCP connection to each port. If the connection succeeds, the port is open. If the machine refuses it, the port is closed. If nothing comes back before a timeout, I call the port filtered. A pool of threads runs many attempts at once, because waiting for silent ports one at a time is slow.</p>
+
+      <h2>The result that surprised me</h2>
+      <p>I scanned ports 1 to 100 on scanme.nmap.org with 1, 10 and 100 threads. My first runs used a timeout of 0.5 seconds.</p>
+
+      <div class="table-scroll">
+        <table class="result">
+          <caption>Ports 1 to 100 on scanme.nmap.org, 0.5 second timeout</caption>
+          <thead><tr><th>Threads</th><th>Time</th><th>Open ports found</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>31.52 s</td><td>3 (22, 53, 80)</td></tr>
+            <tr><td>10</td><td>3.92 s</td><td class="bad">1</td></tr>
+            <tr><td>100</td><td>0.53 s</td><td class="bad">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>The one-thread run found the three open ports. The faster runs found fewer, and the 100-thread run found none. It was the fastest and the most wrong.</p>
+
+      <h2>My explanation</h2>
+      <p>The server is far from me, so each reply takes a noticeable fraction of a second. A single thread with a 0.5 second limit just about copes. With many connections in flight, some replies arrived after the scanner had given up, and it marked those ports as filtered even though they were open. I haven't proven this with packet captures, but the next test supports it.</p>
+
+      <h2>The fix</h2>
+      <p>I raised the timeout to 2 seconds and ran the same three tests.</p>
+
+      <div class="table-scroll">
+        <table class="result">
+          <caption>Same target, 2 second timeout</caption>
+          <thead><tr><th>Threads</th><th>Time</th><th>Open ports found</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>32.70 s</td><td>3 (22, 53, 80)</td></tr>
+            <tr><td>10</td><td>2.99 s</td><td>3</td></tr>
+            <tr><td>100</td><td>0.36 s</td><td>3</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Now every run found the same three ports, and 100 threads was about 90 times faster than one.</p>
+
+      <h2>What I learned</h2>
+      <p>A faster scan is only better if it gives the same answer. A timeout is a guess about how slow the network can be, and a guess that is too short fails quietly. The program printed a clean result and nothing in it hinted that anything was missing.</p>
+      <p>My scanner also puts every kind of failure under "filtered", including errors that have nothing to do with a silent port. Reporting those separately is the next improvement I want to make.</p>
+
+      <h2>Limits</h2>
+      <p>It only does full TCP connections, so it can't do stealth scans, UDP scans or operating system detection, and it shows up in the target's logs. I tested it against one remote server, so the exact timings will differ on other networks.</p>
+    </article>
+
+    <footer>
+      <p><a href="index.html">Back to home</a></p>
+    </footer>
+  </div>
+</body>
+</html>
